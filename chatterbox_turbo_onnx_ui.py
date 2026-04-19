@@ -1,0 +1,200 @@
+# Copy of chatterbox_turbo_onnx.py with a callable generate_speech function
+
+import os
+import json
+import onnxruntime
+from transformers import AutoTokenizer
+from huggingface_hub import hf_hub_download
+import numpy as np
+from tqdm import trange
+import librosa
+import soundfile as sf
+
+MODEL_ID = "ResembleAI/chatterbox-turbo-ONNX"
+SAMPLE_RATE = 24000
+START_SPEECH_TOKEN = 6561
+STOP_SPEECH_TOKEN = 6562
+SILENCE_TOKEN = 4299
+NUM_KV_HEADS = 16
+HEAD_DIM = 64
+
+
+class RepetitionPenaltyLogitsProcessor:
+    def __init__(self, penalty: float):
+        if not isinstance(penalty, float) or not (penalty > 0):
+            raise ValueError(f"`penalty` must be a strictly positive float, but is {penalty}")
+        self.penalty = penalty
+
+    def __call__(self, input_ids: np.ndarray, scores: np.ndarray) -> np.ndarray:
+        score = np.take_along_axis(scores, input_ids, axis=1)
+        score = np.where(score < 0, score * self.penalty, score / self.penalty)
+        scores_processed = scores.copy()
+        np.put_along_axis(scores_processed, input_ids, score, axis=1)
+        return scores_processed
+
+
+def download_model(name: str, dtype: str = "fp32") -> str:
+    """Download an ONNX model file and its weight data.
+
+    Args:
+        name: Model component name (e.g., "conditional_decoder").
+        dtype: Data type string (fp32, fp16, q8, q4, q4f16).
+
+    Returns:
+        Path to the downloaded ONNX graph file.
+    """
+    filename = f"{name}{'' if dtype == 'fp32' else '_quantized' if dtype == 'q8' else f'_{dtype}'}.onnx"
+    graph = hf_hub_download(MODEL_ID, subfolder="onnx", filename=filename)
+    hf_hub_download(MODEL_ID, subfolder="onnx", filename=f"{filename}_data")
+    return graph
+
+
+def load_source_scripts() -> dict:
+    """Load the JSON mapping of source keys to transcripts."""
+    script_path = os.path.join(os.path.dirname(__file__), "sourcefiles", "sourcscript.json")
+    if not os.path.exists(script_path):
+        return {}
+    with open(script_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_source_scripts(scripts: dict) -> None:
+    """Persist the source script mapping back to JSON."""
+    script_path = os.path.join(os.path.dirname(__file__), "sourcefiles", "sourcscript.json")
+    with open(script_path, "w", encoding="utf-8") as f:
+        json.dump(scripts, f, indent=2, ensure_ascii=False)
+
+
+def list_source_wav_files() -> list:
+    """Return a list of available .wav files in the sourcefiles directory."""
+    source_dir = os.path.join(os.path.dirname(__file__), "sourcefiles")
+    if not os.path.isdir(source_dir):
+        return []
+    return [f for f in os.listdir(source_dir) if f.lower().endswith('.wav')]
+
+
+def generate_speech(
+    text: str,
+    source_key: str,
+    output_name: str = None,
+    emote: str = "laugh",
+    model_dtype: str = "q4",
+    max_new_tokens: int = 256,
+    repetition_penalty: float = 1.2,
+    exaggeration: float = 0.5,
+    cfg_weight: float = 0.5,
+    apply_watermark: bool = False,
+) -> str:
+    """Generate speech audio using the Chatterbox Turbo ONNX model.
+
+    Parameters correspond to the UI controls. ``exaggeration`` and ``cfg_weight`` are
+    currently placeholders – they are logged for future model extensions.
+
+    Returns the path to the generated wav file.
+    """
+    # Resolve source wav path
+    wav_dir = os.path.join(os.path.dirname(__file__), "sourcefiles")
+    target_voice_path = os.path.join(wav_dir, f"{source_key}.wav")
+    if not os.path.isfile(target_voice_path):
+        raise FileNotFoundError(f"Source wav file not found: {target_voice_path}")
+
+    # Determine output filename
+    if not output_name:
+        output_name = f"{source_key}_dtype-{model_dtype}_tokens-{max_new_tokens}_pen-{repetition_penalty}.wav"
+    output_path = os.path.abspath(output_name)
+
+    print(f"Generating speech for emote: {emote}")
+    print(f"Input text: {text}")
+    print(f"Model dtype: {model_dtype}, max_new_tokens: {max_new_tokens}, repetition_penalty: {repetition_penalty}")
+    print(f"Exaggeration: {exaggeration}, cfg_weight: {cfg_weight}")
+
+    # Download required ONNX components
+    conditional_decoder_path = download_model("conditional_decoder", dtype=model_dtype)
+    speech_encoder_path = download_model("speech_encoder", dtype=model_dtype)
+    embed_tokens_path = download_model("embed_tokens", dtype=model_dtype)
+    language_model_path = download_model("language_model", dtype=model_dtype)
+
+    # Create ONNX inference sessions
+    speech_encoder_session = onnxruntime.InferenceSession(speech_encoder_path)
+    embed_tokens_session = onnxruntime.InferenceSession(embed_tokens_path)
+    language_model_session = onnxruntime.InferenceSession(language_model_path)
+    cond_decoder_session = onnxruntime.InferenceSession(conditional_decoder_path)
+
+    # Load reference audio
+    audio_values, _ = librosa.load(target_voice_path, sr=SAMPLE_RATE)
+    audio_values = audio_values[np.newaxis, :].astype(np.float32)
+
+    # Tokenize text
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    input_ids = tokenizer(text, return_tensors="np")["input_ids"].astype(np.int64)
+
+    # Generation loop
+    repetition_penalty_processor = RepetitionPenaltyLogitsProcessor(penalty=float(repetition_penalty))
+    generate_tokens = np.array([[START_SPEECH_TOKEN]], dtype=np.int64)
+    for i in trange(max_new_tokens, desc="Sampling", dynamic_ncols=True):
+        inputs_embeds = embed_tokens_session.run(None, {"input_ids": input_ids})[0]
+
+        if i == 0:
+            ort_speech_encoder_input = {"audio_values": audio_values}
+            cond_emb, prompt_token, speaker_embeddings, speaker_features = speech_encoder_session.run(
+                None, ort_speech_encoder_input
+            )
+            inputs_embeds = np.concatenate((cond_emb, inputs_embeds), axis=1)
+
+            batch_size, seq_len, _ = inputs_embeds.shape
+            past_key_values = {
+                i.name: np.zeros(
+                    [batch_size, NUM_KV_HEADS, 0, HEAD_DIM],
+                    dtype=np.float16 if i.type == "tensor(float16)" else np.float32,
+                )
+                for i in language_model_session.get_inputs()
+                if "past_key_values" in i.name
+            }
+            attention_mask = np.ones((batch_size, seq_len), dtype=np.int64)
+            position_ids = np.arange(seq_len, dtype=np.int64).reshape(1, -1).repeat(batch_size, axis=0)
+
+        logits, *present_key_values = language_model_session.run(
+            None,
+            dict(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                **past_key_values,
+            ),
+        )
+
+        logits = logits[:, -1, :]
+        next_token_logits = repetition_penalty_processor(generate_tokens, logits)
+
+        input_ids = np.argmax(next_token_logits, axis=-1, keepdims=True).astype(np.int64)
+        generate_tokens = np.concatenate((generate_tokens, input_ids), axis=-1)
+        if (input_ids.flatten() == STOP_SPEECH_TOKEN).all():
+            break
+
+        attention_mask = np.concatenate([attention_mask, np.ones((batch_size, 1), dtype=np.int64)], axis=1)
+        position_ids = position_ids[:, -1:] + 1
+        for j, key in enumerate(past_key_values):
+            past_key_values[key] = present_key_values[j]
+
+    # Decode audio tokens
+    speech_tokens = generate_tokens[:, 1:-1]
+    silence_tokens = np.full((speech_tokens.shape[0], 3), SILENCE_TOKEN, dtype=np.int64)
+    speech_tokens = np.concatenate([prompt_token, speech_tokens, silence_tokens], axis=1)
+
+    wav = cond_decoder_session.run(
+        None,
+        dict(
+            speech_tokens=speech_tokens,
+            speaker_embeddings=speaker_embeddings,
+            speaker_features=speaker_features,
+        ),
+    )[0].squeeze(axis=0)
+
+    if apply_watermark:
+        import perth
+        watermarker = perth.PerthImplicitWatermarker()
+        wav = watermarker.apply_watermark(wav, sample_rate=SAMPLE_RATE)
+
+    sf.write(output_path, wav, SAMPLE_RATE)
+    print(f"Audio saved to: {output_path}")
+    return output_path

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Chatterbox ONNX TTS UI</title>
+    <style>
+        body {font-family: Arial, sans-serif; margin: 2rem;}
+        label {display: block; margin-top: 1rem;}
+        input, select, textarea {width: 100%; max-width: 400px; padding: 0.4rem;}
+        button {margin-top: 1rem; padding: 0.6rem 1rem;}
+        .output {margin-top: 2rem;}
+    </style>
+</head>
+<body>
+    <h1>Chatterbox ONNX Text‑to‑Speech</h1>
+
+    <form id="tts-form" enctype="multipart/form-data">
+        <!-- Source selection and upload side‑by‑side -->
+        <div style="display:flex; align-items:flex-start; gap:2rem;">
+            <div>
+                <label for="source-key">Choose a pre‑existing voice</label>
+                <select id="source-key" name="source_key" required></select>
+                <button type="button" id="refresh-source" style="margin-top:0.5rem;">Refresh</button>
+            </div>
+            <div>
+                <h3>Upload New Voice (minimum 10 seconds)</h3>
+                <label for="new-audio">Audio file (WAV)</label>
+                <input type="file" id="new-audio" name="new_audio" accept=".wav" required />
+                <p style="font-size:0.9em; margin-top:0.2rem;">
+                    Naming convention: <strong>B|A_&lt;type&gt;</strong> (e.g., <code>B_male</code>, <code>A_child_female</code>)
+                </p>
+                <button type="button" id="upload-audio" style="margin-top:0.5rem;">Upload Voice</button>
+            </div>
+        </div>
+
+        <label for="text" style="margin-top:1rem; display:block;">Text prompt to generate audio files (include optional emotion tags, e.g. [laugh])</label>
+        <textarea id="text" name="text" rows="3" required>Let me tell you a secret! [whispering] There is no one in the office today!</textarea>
+
+        <!-- Acceptable emotion tags -->
+        <h3 style="margin-top:0.5rem;">Acceptable Emotion Tags</h3>
+        <p id="tag-list">angry, fear, surprised, whispering, advertisement, dramatic, narration, crying, happy, sarcastic, clear throat, sigh, shush, cough, groan, sniff, gasp, chuckle, laugh</p>
+
+        <!-- Parameters in two horizontal rows -->
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:1rem;">
+            <div>
+                <label for="model-dtype">Model dtype</label>
+                <select id="model-dtype" name="model_dtype">
+                    <option value="fp32">fp32</option>
+                    <option value="fp16">fp16</option>
+                    <option value="q8">q8</option>
+                    <option value="q4" selected>q4</option>
+                    <option value="q4f16">q4f16</option>
+                </select>
+                <p style="font-size:0.85em; margin:0;">Select precision/quantization level for the ONNX model.</p>
+            </div>
+            <div>
+                <label for="max-tokens">Max new tokens (256‑1024)</label>
+                <input type="number" id="max-tokens" name="max_new_tokens" min="256" max="1024" value="256" />
+                <p style="font-size:0.85em; margin:0;">Controls the length of generated speech (higher = longer).</p>
+            </div>
+            <div>
+                <label for="rep-penalty">Repetition penalty</label>
+                <input type="number" step="0.1" id="rep-penalty" name="repetition_penalty" value="1.2" />
+                <p style="font-size:0.85em; margin:0;">Penalizes repeated tokens to improve diversity.</p>
+            </div>
+            <div>
+                <label for="exaggeration">Exaggeration</label>
+                <input type="number" step="0.1" id="exaggeration" name="exaggeration" value="0.5" />
+                <p style="font-size:0.85em; margin:0;">Adjusts expressive intensity (higher = more dramatic).</p>
+            </div>
+            <div>
+                <label for="cfg-weight">CFG weight</label>
+                <input type="number" step="0.1" id="cfg-weight" name="cfg_weight" value="0.5" />
+                <p style="font-size:0.85em; margin:0;">Controls how strongly the model follows the prompt (lower = more freedom).</p>
+            </div>
+            <div>
+                <label for="output-name">Output filename (optional)</label>
+                <input type="text" id="output-name" name="output_name" placeholder="Leave empty for auto‑generated name" />
+            </div>
+        </div>
+
+        <h3 style="margin-top:1rem;">Acceptable Emotion Tags</h3>
+        <p id="tag-list">angry, fear, surprised, whispering, advertisement, dramatic, narration, crying, happy, sarcastic, clear throat, sigh, shush, cough, groan, sniff, gasp, chuckle, laugh</p>
+
+        <button type="submit" style="margin-top:1rem;">Generate Speech</button>
+    </form>
+
+    <div class="output" id="output-section" style="display:none;">
+        <h2>Generated Audio (last 10)</h2>
+        <div id="output-list"></div>
+    </div>
+
+    <script>
+        // Populate source wav dropdown
+        async function loadSourceKeys() {
+            const resp = await fetch('/source-files');
+            const keys = await resp.json();
+            const select = document.getElementById('source-key');
+            // clear existing options
+            select.innerHTML = '';
+            if (keys.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'No pre‑existing voices found. Please upload a new voice.';
+                opt.disabled = true;
+                select.appendChild(opt);
+            } else {
+                keys.forEach(k => {
+                    const opt = document.createElement('option');
+                    opt.value = k;
+                    opt.textContent = k;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        // Refresh button handler
+        document.getElementById('refresh-source').addEventListener('click', loadSourceKeys);
+
+        // Upload new audio handler
+        document.getElementById('upload-audio').addEventListener('click', async () => {
+            const fileInput = document.getElementById('new-audio');
+            if (!fileInput.files.length) {
+                alert('Please select a WAV file to upload.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('audio_file', fileInput.files[0]);
+            const uploadResp = await fetch('/upload-audio', {
+                method: 'POST',
+                body: formData,
+            });
+            if (!uploadResp.ok) {
+                const err = await uploadResp.text();
+                alert('Upload error: ' + err);
+                return;
+            }
+            alert('Audio uploaded successfully.');
+            // Refresh source list after upload
+            await loadSourceKeys();
+        });
+
+        document.getElementById('tts-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const data = {
+                text: form.text.value,
+                source_key: form.source_key.value,
+                output_name: form.output_name.value || undefined,
+                emote: "laugh", // default; could be extended later
+                model_dtype: form.model_dtype.value,
+                max_new_tokens: parseInt(form.max_new_tokens.value),
+                repetition_penalty: parseFloat(form.repetition_penalty.value),
+                exaggeration: parseFloat(form.exaggeration.value),
+                cfg_weight: parseFloat(form.cfg_weight.value),
+                apply_watermark: false,
+            };
+
+            // No script handling needed anymore
+
+            const resp = await fetch('/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            if (!resp.ok) {
+                const err = await resp.text();
+                alert('Error: ' + err);
+                return;
+            }
+            const result = await resp.json();
+            const filename = result.output_file;
+            const audioUrl = `/outputs/${filename}`;
+            // Keep a list of last 10 outputs
+            const listDiv = document.getElementById('output-list');
+            const entry = document.createElement('div');
+            entry.style.marginBottom = '0.5rem';
+            entry.innerHTML = `<audio src="${audioUrl}" controls></audio> <span>${filename}</span>`;
+            listDiv.insertBefore(entry, listDiv.firstChild);
+            // Trim to last 10
+            while (listDiv.childElementCount > 10) {
+                listDiv.removeChild(listDiv.lastChild);
+            }
+            document.getElementById('output-section').style.display = 'block';
+        });
+
+        // Initial load
+        loadSourceKeys();
+    </script>
+</body>
+</html>
