@@ -107,7 +107,8 @@ def generate_speech(
     output_path = os.path.join(temp_dir, output_name)
 
     print(f"Generating speech for emote: {emote}")
-    print(f"Input text: {text}")
+    print(f"Input text: '{text}'")
+    print(f"Text length: {len(text)} characters")
     print(f"Model dtype: {model_dtype}, max_new_tokens: {max_new_tokens}, repetition_penalty: {repetition_penalty}")
     print(f"Exaggeration: {exaggeration}, cfg_weight: {cfg_weight}")
 

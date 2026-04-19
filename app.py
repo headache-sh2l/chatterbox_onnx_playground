@@ -68,10 +68,14 @@ def generate():
     if not data:
         abort(400, description="Invalid JSON payload")
 
+    # Debug: log the received data
+    print(f"DEBUG: Received JSON data: {data}")
 
     # Required fields
     text = data.get("text")
     source_key = data.get("source_key")
+    print(f"DEBUG: Extracted text='{text}'")
+    print(f"DEBUG: Extracted source_key='{source_key}'")
     if not text or not source_key:
         abort(400, description="'text' and 'source_key' are required fields")
 

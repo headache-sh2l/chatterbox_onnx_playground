@@ -54,7 +54,7 @@
         </div>
 
         <label for="text" style="margin-top:1rem; display:block;">Text prompt to generate audio files (include optional emotion tags, e.g. [laugh])</label>
-        <textarea id="text" name="text" rows="3" required>Let me tell you a secret! [whispering] There is no one in the office today!</textarea>
+        <textarea id="text" name="text" rows="3" required placeholder="Enter your text here... e.g., Let me tell you a secret! [whispering]"></textarea>
 
         <!-- Acceptable emotion tags -->
         <h3 style="margin-top:0.5rem;">Acceptable Emotion Tags</h3>
@@ -182,6 +182,10 @@
                 cfg_weight: parseFloat(form.cfg_weight.value),
                 apply_watermark: false,
             };
+            
+            // Debug: log the data being sent
+            console.log("Form submission data:", data);
+            console.log("Text value:", form.text.value);
 
             // Show spinner
             document.getElementById('spinner-container').style.display = 'block';
@@ -202,7 +206,8 @@
             }
             const result = await resp.json();
             const filename = result.output_file;
-            const audioUrl = `/outputs/${filename}`;
+            // Add timestamp to prevent browser caching of audio files
+            const audioUrl = `/outputs/${filename}?t=${Date.now()}`;
             // Keep a list of last 10 outputs
             const listDiv = document.getElementById('output-list');
             const entry = document.createElement('div');
