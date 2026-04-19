@@ -9,6 +9,26 @@
         input, select, textarea {width: 100%; max-width: 400px; padding: 0.4rem;}
         button {margin-top: 1rem; padding: 0.6rem 1rem;}
         .output {margin-top: 2rem;}
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .spinner-text {
+            margin-top: 1rem;
+            font-size: 0.9em;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -25,7 +45,7 @@
             <div>
                 <h3>Upload New Voice (minimum 10 seconds)</h3>
                 <label for="new-audio">Audio file (WAV)</label>
-                <input type="file" id="new-audio" name="new_audio" accept=".wav" required />
+                <input type="file" id="new-audio" name="new_audio" accept=".wav" />
                 <p style="font-size:0.9em; margin-top:0.2rem;">
                     Naming convention: <strong>B|A_&lt;type&gt;</strong> (e.g., <code>B_male</code>, <code>A_child_female</code>)
                 </p>
@@ -85,6 +105,12 @@
         <button type="submit" style="margin-top:1rem;">Generate Speech</button>
     </form>
 
+    <div id="spinner-container" style="display:none;">
+        <div class="spinner-text">
+            Generating speech<span class="spinner"></span>
+        </div>
+    </div>
+
     <div class="output" id="output-section" style="display:none;">
         <h2>Generated Audio (last 10)</h2>
         <div id="output-list"></div>
@@ -105,10 +131,11 @@
                 opt.disabled = true;
                 select.appendChild(opt);
             } else {
-                keys.forEach(k => {
+                keys.forEach((k, idx) => {
                     const opt = document.createElement('option');
                     opt.value = k;
                     opt.textContent = k;
+                    if (idx === 0) opt.selected = true;  // Auto-select first voice
                     select.appendChild(opt);
                 });
             }
@@ -156,13 +183,18 @@
                 apply_watermark: false,
             };
 
-            // No script handling needed anymore
+            // Show spinner
+            document.getElementById('spinner-container').style.display = 'block';
 
             const resp = await fetch('/generate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
+            
+            // Hide spinner
+            document.getElementById('spinner-container').style.display = 'none';
+            
             if (!resp.ok) {
                 const err = await resp.text();
                 alert('Error: ' + err);
