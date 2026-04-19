@@ -2,6 +2,7 @@
 
 import os
 import json
+import tempfile
 import onnxruntime
 from transformers import AutoTokenizer
 from huggingface_hub import hf_hub_download
@@ -98,10 +99,12 @@ def generate_speech(
     if not os.path.isfile(target_voice_path):
         raise FileNotFoundError(f"Source wav file not found: {target_voice_path}")
 
-    # Determine output filename
+    # Determine output filename and save to system temp directory
     if not output_name:
         output_name = f"{source_key}_{model_dtype}_t-{max_new_tokens}_{exaggeration}_{cfg_weight}.wav"
-    output_path = os.path.abspath(output_name)
+    # Save to system temp directory (cross-platform compatible)
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, output_name)
 
     print(f"Generating speech for emote: {emote}")
     print(f"Input text: {text}")

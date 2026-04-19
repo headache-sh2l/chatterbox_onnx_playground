@@ -9,6 +9,7 @@ Provides endpoints:
 
 import os
 import json
+import tempfile
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, abort
 
@@ -105,11 +106,11 @@ def generate():
     return jsonify({"output_file": filename})
 
 
-# Serve generated wav files from the workspace root
+# Serve generated wav files from the system temp directory
 @app.route('/outputs/<path:filename>')
 def serve_output(filename):
-    directory = os.getcwd()
-    return send_from_directory(directory, filename)
+    temp_dir = tempfile.gettempdir()
+    return send_from_directory(temp_dir, filename)
 
 # ---------------------------------------------------------------------------
 # Upload new audio file endpoint (moved above __main__ to ensure registration)
@@ -149,26 +150,28 @@ def upload_audio():
 
 
 def cleanup_generated_files():
-    """Delete all previously generated .wav files from the workspace root on startup.
+    """Delete all previously generated .wav files from the system temp directory on startup.
     
     Keeps source files in the sourcefiles/ directory untouched.
     """
-    workspace_dir = os.getcwd()
-    sourcefiles_dir = os.path.join(workspace_dir, 'sourcefiles')
+    temp_dir = tempfile.gettempdir()
     
-    # List all .wav files in workspace root
-    for filename in os.listdir(workspace_dir):
-        if filename.endswith('.wav'):
-            filepath = os.path.join(workspace_dir, filename)
-            # Only delete if it's a file (not a directory) and not in sourcefiles/
-            if os.path.isfile(filepath):
-                try:
-                    os.remove(filepath)
-                    print(f"Cleaned up: {filename}")
-                except Exception as e:
-                    print(f"Error deleting {filename}: {e}")
+    # List all .wav files in temp directory and delete them
+    try:
+        for filename in os.listdir(temp_dir):
+            if filename.endswith('.wav'):
+                filepath = os.path.join(temp_dir, filename)
+                # Only delete if it's a file
+                if os.path.isfile(filepath):
+                    try:
+                        os.remove(filepath)
+                        print(f"Cleaned up temp: {filename}")
+                    except Exception as e:
+                        print(f"Error deleting {filename}: {e}")
+    except Exception as e:
+        print(f"Error accessing temp directory: {e}")
     
-    print("Cleanup complete. Workspace ready.")
+    print("Cleanup complete. Temp directory ready.")
 
 
 if __name__ == '__main__':
