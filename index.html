@@ -207,7 +207,7 @@
             const listDiv = document.getElementById('output-list');
             const entry = document.createElement('div');
             entry.style.marginBottom = '0.5rem';
-            entry.innerHTML = `<audio src="${audioUrl}" controls></audio> <span>${filename}</span>`;
+            entry.innerHTML = `<audio src="${audioUrl}" controls></audio> <span style="font-size: 0.75em; font-style: italic;"><a href="${audioUrl}" download style="color: inherit; text-decoration: none;">${filename}</a></span>`;
             listDiv.insertBefore(entry, listDiv.firstChild);
             // Trim to last 10
             while (listDiv.childElementCount > 10) {

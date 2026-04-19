@@ -100,7 +100,7 @@ def generate_speech(
 
     # Determine output filename
     if not output_name:
-        output_name = f"{source_key}_dtype-{model_dtype}_tokens-{max_new_tokens}_pen-{repetition_penalty}.wav"
+        output_name = f"{source_key}_{model_dtype}_t-{max_new_tokens}_{exaggeration}_{cfg_weight}.wav"
     output_path = os.path.abspath(output_name)
 
     print(f"Generating speech for emote: {emote}")

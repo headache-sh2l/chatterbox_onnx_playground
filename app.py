@@ -148,6 +148,32 @@ def upload_audio():
     return jsonify({'status': 'ok', 'key': base_name})
 
 
+def cleanup_generated_files():
+    """Delete all previously generated .wav files from the workspace root on startup.
+    
+    Keeps source files in the sourcefiles/ directory untouched.
+    """
+    workspace_dir = os.getcwd()
+    sourcefiles_dir = os.path.join(workspace_dir, 'sourcefiles')
+    
+    # List all .wav files in workspace root
+    for filename in os.listdir(workspace_dir):
+        if filename.endswith('.wav'):
+            filepath = os.path.join(workspace_dir, filename)
+            # Only delete if it's a file (not a directory) and not in sourcefiles/
+            if os.path.isfile(filepath):
+                try:
+                    os.remove(filepath)
+                    print(f"Cleaned up: {filename}")
+                except Exception as e:
+                    print(f"Error deleting {filename}: {e}")
+    
+    print("Cleanup complete. Workspace ready.")
+
+
 if __name__ == '__main__':
-    # Run on localhost:5003 to avoid port conflict
+    # Clean up previously generated files on startup
+    cleanup_generated_files()
+    
+    # Run on localhost:5001 to avoid port conflict
     app.run(host='0.0.0.0', port=5001, debug=True)
