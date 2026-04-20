@@ -1,4 +1,4 @@
-# Chatterbox ONNX TTS UI
+# Chatterbox ONNX Playground
 
 A web-based interface for generating speech using Chatterbox Turbo ONNX models.
 
