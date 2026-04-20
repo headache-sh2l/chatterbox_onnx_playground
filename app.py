@@ -12,6 +12,8 @@ import json
 import tempfile
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, abort
+import shutil
+from omnivoice_generate import generate_omnivoice
 
 # Import the generation function and helpers from the UI copy
 from chatterbox_turbo_onnx_ui import (
@@ -108,6 +110,104 @@ def generate():
     # Return the filename relative to the workspace so the UI can load it
     filename = os.path.basename(out_path)
     return jsonify({"output_file": filename})
+
+# ---------------------------------------------------------------------------
+# OmniVoice generation endpoint
+# ---------------------------------------------------------------------------
+@app.route('/omnivoice-generate', methods=['POST'])
+def omnivoice_generate():
+    """Generate audio using OmniVoice.
+
+    Expected JSON payload:
+    {
+        "accent": "american" | "british",
+        "sex": "male" | "female",
+        "pitch": "very_low_pitch" | "low_pitch" | "moderate_pitch" | "high_pitch" | "very_high_pitch",
+        "other": "optional free text describing additional categories"
+    }
+    """
+    data = request.get_json(force=True)
+    if not data:
+        abort(400, description="Invalid JSON payload")
+
+    # Extract and normalize fields
+    accent_raw = data.get('accent', '').strip().lower()
+    sex = data.get('sex', '').strip().lower()
+    pitch_raw = data.get('pitch', '').strip().lower()
+    other = data.get('other', '').strip().lower()
+    other_text = data.get('other_text', '').strip().lower()
+    custom_text = data.get('text', '').strip()  # Custom text from user (not lowercased)
+    
+    # Combine other dropdown and free text modifications
+    if other_text:
+        # Append free text items separated by spaces
+        other = f"{other} {other_text}".strip()
+
+    # Values now come in the exact format expected by OmniVoice (e.g., "american accent", "male", "very low pitch")
+    # No mapping needed; they're already lowercase and use correct spacing
+    
+    # Determine if any attribute is provided
+    any_provided = any([accent_raw, sex, pitch_raw, other])
+
+    # Build instruction string only if something is provided
+    if any_provided:
+        instruct_parts = []
+        if accent_raw:
+            instruct_parts.append(accent_raw)  # Already in format "american accent"
+        if sex:
+            instruct_parts.append(sex)  # Already lowercase "male" or "female"
+        if pitch_raw:
+            instruct_parts.append(pitch_raw)  # Already in format "very low pitch"
+        if other:
+            instruct_parts.append(other)  # Already combined with other_text if provided
+        instruct = ', '.join(instruct_parts)
+    else:
+        instruct = ''
+
+    # Build output filename in ALL CAPS with underscores (skip empty parts)
+    filename_parts = []
+    if accent_raw:
+        filename_parts.append(accent_raw.replace(' ', '_').upper())
+    if sex:
+        filename_parts.append(sex.upper())
+    if pitch_raw:
+        filename_parts.append(pitch_raw.replace(' ', '_').upper())
+    if other:
+        filename_parts.append(other.replace(' ', '_').upper())
+    output_name = "_".join(filename_parts) + ".wav" if filename_parts else "output.wav"
+
+    # Generate audio and save to temp directory
+    try:
+        out_path = generate_omnivoice(instruct, output_name, custom_text)
+    except Exception as exc:
+        abort(500, description=str(exc))
+
+    return jsonify({"output_file": os.path.basename(out_path)})
+
+# ---------------------------------------------------------------------------
+# Add generated OmniVoice file to Chatterbox source directory
+# ---------------------------------------------------------------------------
+@app.route('/add-omnivoice', methods=['POST'])
+def add_omnivoice():
+    """Move a generated OmniVoice wav file from the temp directory into
+    the ``sourcefiles`` folder so it can be used by the Chatterbox UI.
+    Expected JSON payload: {"filename": "FILE.wav"}
+    """
+    data = request.get_json(force=True)
+    if not data or 'filename' not in data:
+        abort(400, description='Missing filename')
+    filename = data['filename']
+    temp_path = os.path.join(tempfile.gettempdir(), filename)
+    if not os.path.isfile(temp_path):
+        abort(404, description='File not found in temp directory')
+    dest_dir = os.path.join(os.path.dirname(__file__), 'sourcefiles')
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_path = os.path.join(dest_dir, filename)
+    try:
+        shutil.move(temp_path, dest_path)
+    except Exception as exc:
+        abort(500, description=str(exc))
+    return jsonify({'status': 'added', 'key': os.path.splitext(filename)[0]})
 
 
 # Serve generated wav files from the system temp directory

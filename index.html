@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Chatterbox ONNX TTS UI</title>
+    <title>Narrator App Model Testing Workbench</title>
     <style>
         body {font-family: Arial, sans-serif; margin: 2rem;}
         label {display: block; margin-top: 1rem;}
@@ -32,9 +32,20 @@
     </style>
 </head>
 <body>
-    <h1>Chatterbox ONNX Text‑to‑Speech</h1>
+    <h1 id="main-title">Narrator App Model Testing Workbench</h1>
+    <p style="font-size:0.9rem; margin-top:0.3rem;">Click on the tabs below to navigate preferred model</p>
 
-    <form id="tts-form" enctype="multipart/form-data">
+    <!-- Tab navigation -->
+    <div style="margin-bottom:1rem;">
+        <button type="button" id="tab-chatterbox" class="tab-button active" style="margin-right:0.5rem;">Chatterbox</button>
+        <button type="button" id="tab-omnivoice" class="tab-button" style="margin-right:0.5rem;">Omnivoice</button>
+    </div>
+    <!-- Note for Chatterbox tab -->
+    <p style="font-size:0.8rem; margin-top:0.5rem;">Chatterbox is the main dialogue driver for the proposed Narrator App</p>
+
+    <!-- Chatterbox tab content -->
+    <div id="chatterbox-tab">
+        <form id="tts-form" enctype="multipart/form-data">
         <!-- Source selection and upload side‑by‑side -->
         <div style="display:flex; align-items:flex-start; gap:2rem;">
             <div>
@@ -58,7 +69,7 @@
 
         <!-- Acceptable emotion tags -->
         <h3 style="margin-top:0.5rem;">Acceptable Emotion Tags</h3>
-        <p id="tag-list">angry, fear, surprised, whispering, advertisement, dramatic, narration, crying, happy, sarcastic, clear throat, sigh, shush, cough, groan, sniff, gasp, chuckle, laugh</p>
+        <p id="tag-list-chatterbox">[angry], [fear], [surprised], [whispering], [advertisement], [dramatic], [narration], [crying], [happy], [sarcastic], [clear throat], [shush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]</p>
 
         <!-- Parameters in two horizontal rows -->
         <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:1rem;">
@@ -99,8 +110,6 @@
             </div>
         </div>
 
-        <h3 style="margin-top:1rem;">Acceptable Emotion Tags</h3>
-        <p id="tag-list">angry, fear, surprised, whispering, advertisement, dramatic, narration, crying, happy, sarcastic, clear throat, sigh, shush, cough, groan, sniff, gasp, chuckle, laugh</p>
 
         <button type="submit" style="margin-top:1rem;">Generate Speech</button>
     </form>
@@ -115,7 +124,25 @@
         <h2>Generated Audio (last 10)</h2>
         <div id="output-list"></div>
     </div>
+    </div>
 
+    <style>
+        .tab-button {
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            background: #fff;
+            border-bottom: none;
+            font-weight: bold;
+        }
+        #omnivoice-tab {
+            padding: 1rem;
+            min-height: 200px;
+        }
+    </style>
     <script>
         // Populate source wav dropdown
         async function loadSourceKeys() {
@@ -223,6 +250,169 @@
 
         // Initial load
         loadSourceKeys();
+    </script>
+
+    <!-- Omnivoice tab content (hidden by default) -->
+    <div id="omnivoice-tab" style="display:none;">
+        <h2>Narrator App Model Testing Worklbench</h2>
+        <form id="omnivoice-form">
+            <label for="accent">Accent (Optional)</label>
+            <select id="accent" name="accent">
+                <option value="">None</option>
+                <option value="american accent">american accent</option>
+                <option value="british accent">british accent</option>
+                <option value="australian accent">australian accent</option>
+                <option value="chinese accent">chinese accent</option>
+                <option value="canadian accent">canadian accent</option>
+                <option value="indian accent">indian accent</option>
+                <option value="korean accent">korean accent</option>
+                <option value="portuguese accent">portuguese accent</option>
+                <option value="russian accent">russian accent</option>
+                <option value="japanese accent">japanese accent</option>
+            </select>
+            <label for="sex">Sex (Optional)</label>
+            <select id="sex" name="sex">
+                <option value="">None</option>
+                <option value="male">male</option>
+                <option value="female">female</option>
+            </select>
+            <label for="pitch">Pitch (Optional)</label>
+            <select id="pitch" name="pitch">
+                <option value="">None</option>
+                <option value="very low pitch">very low pitch</option>
+                <option value="low pitch">low pitch</option>
+                <option value="moderate pitch">moderate pitch</option>
+                <option value="high pitch">high pitch</option>
+                <option value="very high pitch">very high pitch</option>
+            </select>
+            <label for="other">Age (Optional)</label>
+            <select id="other" name="other">
+                <option value="">-- none --</option>
+                <option value="child">child</option>
+                <option value="teenager">teenager</option>
+                <option value="young adult">young adult</option>
+                <option value="middle-aged">middle-aged</option>
+                <option value="elderly">elderly</option>
+            </select>
+            <label for="other-text" style="margin-top:0.5rem; display:block;">Other modifications (Optional)</label>
+            <textarea id="other-text" name="other_text" rows="2" placeholder="Enter any additional modifiers..." style="width:100%; max-width:400px;"></textarea>
+            <label for="omnivoice-text" style="margin-top:0.5rem; display:block;">Text</label>
+            <textarea id="omnivoice-text" name="omnivoice_text" rows="2" placeholder="Enter prompt text..." style="width:100%; max-width:400px;" required></textarea>
+            <button type="submit" style="margin-top:1rem;">Generate OmniVoice<span id="omnivoice-spinner" class="spinner" style="margin-left:8px; display:none;"></span></button>
+        </form>
+        <!-- Moved Emotion Tags for OmniVoice -->
+        <h3 style="margin-top:1rem;">OmniVoice Emotion Tags</h3>
+        <p id="omnivoice-tag-list">[laughter], [sigh], [confirmation-en], [question-en], [question-ah], [question-oh], [question-ei], [question-yi], [surprise-ah], [surprise-oh], [surprise-wa], [surprise-yo], [dissatisfaction-hnn]</p>
+        <div id="api-display" style="margin-top:1rem; padding:1rem; background:#f0f0f0; border-radius:4px; display:none;">
+            <strong>API Payload:</strong>
+            <pre id="api-payload" style="margin:0.5rem 0; background:#fff; padding:0.5rem; border-radius:3px;"></pre>
+        </div>
+        <div id="omnivoice-output" style="margin-top:1rem; display:none;">
+            <h3>Generated Audio</h3>
+            <audio id="omnivoice-audio" controls></audio>
+            <div><a id="omnivoice-download" href="#" download>Download</a></div>
+            <button id="add-to-chatterbox" style="margin-top:0.5rem;">Add to Chatterbox</button>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching logic
+        const tabChatterboxBtn = document.getElementById('tab-chatterbox');
+        const tabOmnivoiceBtn = document.getElementById('tab-omnivoice');
+        const chatterboxTab = document.getElementById('chatterbox-tab');
+        const omnivoiceTab = document.getElementById('omnivoice-tab');
+        function setActiveTab(isChatterbox) {
+            console.log('setActiveTab called with isChatterbox:', isChatterbox);
+            if (isChatterbox) {
+                chatterboxTab.style.display = 'block';
+                omnivoiceTab.style.display = 'none';
+                tabChatterboxBtn.classList.add('active');
+                tabOmnivoiceBtn.classList.remove('active');
+                document.getElementById('main-title').textContent = 'Narrator App Model Testing Workbench';
+                console.log('Showing Chatterbox tab');
+            } else {
+                chatterboxTab.style.display = 'none';
+                omnivoiceTab.style.display = 'block';
+                tabChatterboxBtn.classList.remove('active');
+                tabOmnivoiceBtn.classList.add('active');
+                document.getElementById('main-title').textContent = 'Narrator App Model Testing Workbench';
+                console.log('Showing OmniVoice tab, form element:', document.getElementById('omnivoice-form'));
+            }
+        }
+        tabChatterboxBtn.addEventListener('click', () => setActiveTab(true));
+        tabOmnivoiceBtn.addEventListener('click', () => setActiveTab(false));
+
+        // Omnivoice form submission
+        document.getElementById('omnivoice-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                accent: document.getElementById('accent').value,
+                sex: document.getElementById('sex').value,
+                pitch: document.getElementById('pitch').value,
+                other: document.getElementById('other').value || undefined,
+                other_text: document.getElementById('other-text').value || undefined,
+                text: document.getElementById('omnivoice-text').value,
+            };
+            // Show API payload
+            const apiDisplay = document.getElementById('api-display');
+            const apiPayload = document.getElementById('api-payload');
+            apiPayload.textContent = JSON.stringify({
+                text: data.text ? data.text.substring(0, 30) + (data.text.length > 30 ? '...' : '') : '',
+                instruct: data.accent || data.sex || data.pitch || data.other || data.other_text ? 
+                    [data.accent, data.sex, data.pitch, data.other, data.other_text]
+                        .filter(Boolean)
+                        .join(', ') : ''
+            }, null, 2);
+            apiDisplay.style.display = 'block';
+            
+            // Show spinner (reuse existing spinner container) and button spinner
+            document.getElementById('spinner-container').style.display = 'block';
+            document.getElementById('omnivoice-spinner').style.display = 'inline-block';
+            const resp = await fetch('/omnivoice-generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('omnivoice-spinner').style.display = 'none';
+            if (!resp.ok) {
+                const err = await resp.text();
+                alert('Error: ' + err);
+                return;
+            }
+            const result = await resp.json();
+            const filename = result.output_file;
+            const audioUrl = `/outputs/${filename}?t=${Date.now()}`;
+            const audioEl = document.getElementById('omnivoice-audio');
+            audioEl.src = audioUrl;
+            document.getElementById('omnivoice-download').href = audioUrl;
+            document.getElementById('omnivoice-download').textContent = filename;
+            document.getElementById('omnivoice-output').style.display = 'block';
+            // Store filename for add-to-chatterbox action
+            document.getElementById('add-to-chatterbox').dataset.filename = filename;
+        });
+
+        // Add generated OmniVoice file to Chatterbox sourcefiles
+        document.getElementById('add-to-chatterbox').addEventListener('click', async () => {
+            const filename = document.getElementById('add-to-chatterbox').dataset.filename;
+            if (!filename) return;
+            const resp = await fetch('/add-omnivoice', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename})
+            });
+            if (!resp.ok) {
+                const err = await resp.text();
+                alert('Error adding to Chatterbox: ' + err);
+                return;
+            }
+            alert('Added to Chatterbox!');
+            // Refresh source list in Chatterbox tab
+            await loadSourceKeys();
+        });
+
+        // Initialize default view
+        setActiveTab(true);
     </script>
 </body>
 </html>
