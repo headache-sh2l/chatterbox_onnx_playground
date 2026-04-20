@@ -298,7 +298,7 @@
             <textarea id="other-text" name="other_text" rows="2" placeholder="Enter any additional modifiers..." style="width:100%; max-width:400px;"></textarea>
             <label for="omnivoice-text" style="margin-top:0.5rem; display:block;">Text</label>
             <textarea id="omnivoice-text" name="omnivoice_text" rows="2" placeholder="Enter prompt text..." style="width:100%; max-width:400px;" required></textarea>
-            <button type="submit" style="margin-top:1rem;">Generate OmniVoice</button>
+            <button type="submit" style="margin-top:1rem;">Generate OmniVoice<span id="omnivoice-spinner" class="spinner" style="margin-left:8px; display:none;"></span></button>
         </form>
         <!-- Moved Emotion Tags for OmniVoice -->
         <h3 style="margin-top:1rem;">OmniVoice Emotion Tags</h3>
@@ -365,14 +365,16 @@
             }, null, 2);
             apiDisplay.style.display = 'block';
             
-            // Show spinner (reuse existing spinner container)
+            // Show spinner (reuse existing spinner container) and button spinner
             document.getElementById('spinner-container').style.display = 'block';
+            document.getElementById('omnivoice-spinner').style.display = 'inline-block';
             const resp = await fetch('/omnivoice-generate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
             document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('omnivoice-spinner').style.display = 'none';
             if (!resp.ok) {
                 const err = await resp.text();
                 alert('Error: ' + err);
