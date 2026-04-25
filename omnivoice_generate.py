@@ -9,13 +9,40 @@ WAV file to the system temporary directory.
 import os
 import tempfile
 import soundfile as sf
+import torch
+import logging
 from omnivoice import OmniVoice
 
-# Load the model once at import time. Adjust device_map as needed.
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Auto-detect GPU availability and provide feedback
+if torch.cuda.is_available():
+    _device = "cuda:0"
+    gpu_name = torch.cuda.get_device_name(0)
+    logger.info(f"GPU detected: {gpu_name} - Using GPU acceleration")
+else:
+    _device = "cpu"
+    logger.warning("CUDA not available - Using CPU. If you have a GPU, install CUDA toolkit and PyTorch with CUDA support for better performance")
+    
+    # Check if GPU hardware is present but CUDA not configured
+    try:
+        import subprocess
+        result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            gpu_names = [name.strip() for name in result.stdout.strip().split('\n') if name.strip()]
+            if gpu_names:
+                logger.warning(f"GPU hardware detected ({', '.join(gpu_names)}) but CUDA not available. "
+                             "Install NVIDIA CUDA toolkit and ensure PyTorch is installed with CUDA support.")
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        pass  # nvidia-smi not available or no GPU
+
 _model = OmniVoice.from_pretrained(
     "k2-fsa/OmniVoice",
-    device_map="cpu",  # change to "cuda:0" if a GPU is available
-    dtype="float16",
+    device_map=_device,
+    dtype=torch.float16,
 )
 
 def generate_omnivoice(instruct: str, output_name: str, text: str = "") -> str:
